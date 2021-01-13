@@ -1,0 +1,41 @@
+## get weather data for locais de votação
+
+library(tidyverse)
+library(chirps)
+library(sf)
+
+#select locais only at border municipalities
+
+locais_border <- geocoded_polliing_stations_1_ %>% filter( cd_localidade_tse %in% pair_revised$sigla_ue)
+lonlat <- data.frame(lon= locais_border$long, lat= locais_border$lat)
+lonlat <- unique(lonlat)
+lonlat <- drop_na(lonlat)
+
+#transform lonlat dataset using library::sf to work better with chirps
+lonlat_sf <- st_as_sf(lonlat, coords = c("lon", "lat"))
+
+#clean for bad coordinates identified for 2019 and continue 
+geometry <- c("c(-37.884830972621, -12.3950568928562)", "c(-35.259530513603, -5.52283983433231)", "c(-39.4348422037037, -12.7208649814815)", "c(-37.884830972621, -12.3858857981083)", "c(-37.8812899453739, -12.3848975101627)", "c(-35.2594776, -5.5199009)", "c(-35.2631927963873, -5.51569153504488)", "c(-35.1703229, -5.8874883)",
+              "c(-35.1726071944444, -5.88351241666667)", "c(-35.1692284, -5.8852593)", "c(-38.47214, -3.711801)", "c(-38.46505, -3.716789)", "c(-38.46433, -3.719222)", "c(-38.468543, -3.7111451)", "c(-38.463783, -3.72248681944444)", "c(-38.4713088888889, -3.72176377777778)", "c(-38.4667253611111, -3.71737375855868)")
+bad_coord <- data.frame(geometry)
+`%notin%` <- Negate(`%in%`)
+lonlat_clean <- lonlat_sf %>% filter(geometry %notin% bad_coord$geometry)
+
+
+#loop for Chirps API
+#select period with dates line
+dates <- c("2018-1-1", "2018-12-31")
+
+rainfall_all_indexes <- data.frame()
+
+for(i in 1:nrow(lonlat_clean))
+{coord <- lonlat_clean[i,]
+  rain_local <- get_chirps(coord, dates)
+  yearly_rainfall <- precip_indices(rain_local, timeseries = FALSE)
+  total <- yearly_rainfall %>% pivot_wider(names_from = index, values_from = value)
+  total <- as.data.frame(total)
+  rainfall_all_indexes <- rbind(rainfall_all_indexes, total)
+}
+
+
+write.csv(rainfall_all_indexes, "rain_2018_all_indexes.csv")
